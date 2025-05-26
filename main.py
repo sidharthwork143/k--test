@@ -139,8 +139,8 @@ async def main():
     """Main function to run the bot"""
     
     # Get configuration from environment variables
-    BOT_TOKEN = os.environ.get('BOT_TOKEN')
-    GROUP_CHAT_ID = os.environ.get('GROUP_CHAT_ID')
+    BOT_TOKEN = os.environ.get('7897027139:AAFlhmXq7V5HFP1W5cDBhMFcehQJtWN2ahQ')
+    GROUP_CHAT_ID = os.environ.get('-1002452249428')
     
     # Validate configuration
     if not BOT_TOKEN:
