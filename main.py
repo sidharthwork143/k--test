@@ -138,14 +138,26 @@ def run_flask():
 async def main():
     """Main function to run the bot"""
     
+    # Debug: Print all environment variables (for troubleshooting)
+    logger.info("Available environment variables:")
+    for key in sorted(os.environ.keys()):
+        if 'TOKEN' in key or 'CHAT' in key or 'BOT' in key:
+            logger.info(f"  {key}: {'*' * len(str(os.environ[key]))}")
+        elif key in ['PORT', 'PYTHONPATH']:
+            logger.info(f"  {key}: {os.environ[key]}")
+    
     # Get configuration from environment variables
-    BOT_TOKEN = os.environ.get('7750068271:AAGGs1lHfk_cgfg4h7FZ3lUIC-Mg1cz0kD4')
-    GROUP_CHAT_ID = os.environ.get('-1002452249428')
+    BOT_TOKEN = os.environ.get('BOT_TOKEN')
+    GROUP_CHAT_ID = os.environ.get('GROUP_CHAT_ID')
+    
+    logger.info(f"BOT_TOKEN found: {bool(BOT_TOKEN)}")
+    logger.info(f"GROUP_CHAT_ID found: {bool(GROUP_CHAT_ID)}")
     
     # Validate configuration
     if not BOT_TOKEN:
         logger.error("❌ BOT_TOKEN environment variable is required!")
         logger.error("Set it in Koyeb environment variables")
+        logger.error("Available env vars: " + str(list(os.environ.keys())))
         return
         
     if not GROUP_CHAT_ID:
