@@ -1,7 +1,7 @@
 import logging
 import os
-from telegram import Update
-from telegram.ext import Application, MessageHandler, ChatMemberHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, MessageHandler, ChatMemberHandler, CallbackQueryHandler, CommandHandler, filters, ContextTypes
 from telegram.constants import ChatMemberStatus
 import asyncio
 from flask import Flask
@@ -57,7 +57,7 @@ class TelegramLeaveBot:
                     
                 logger.info(f"Member {left_member.full_name} (@{left_member.username}) left the group")
                 
-                # Send private message to the user who left
+                # Try to send private message first, fallback to group mention
                 try:
                     await context.bot.send_message(
                         chat_id=left_member.id,
@@ -66,16 +66,104 @@ class TelegramLeaveBot:
                              f"Would you mind sharing why you decided to leave? Your feedback would help us improve the group experience for everyone.\n\n"
                              f"Thanks for taking the time to let us know! 🙏"
                     )
-                    logger.info(f"Successfully sent leave message to {left_member.full_name}")
+                    logger.info(f"Successfully sent private leave message to {left_member.full_name}")
                     
                 except Exception as e:
-                    logger.error(f"Failed to send message to {left_member.full_name}: {e}")
-                    # This usually happens when the user has blocked the bot or disabled messages from unknown contacts
+                    logger.info(f"Couldn't send private message to {left_member.full_name}, sending group mention instead")
+                    # Fallback to group mention
+                    try:
+                        username_mention = f"@{left_member.username}" if left_member.username else left_member.first_name
+                        await context.bot.send_message(
+                            chat_id=self.group_chat_id,
+                            text=f"👋 {username_mention}, we're sorry to see you go! 😢\n\n"
+                                 f"If you'd like to share why you left our group, please send me a private message. "
+                                 f"Your feedback helps us improve the community for everyone! 🙏\n\n"
+                                 f"Thanks for being part of our group! ✨"
+                        )
+                        logger.info(f"Successfully sent group mention for {left_member.full_name}")
+                        
+                    except Exception as e2:
+                        logger.error(f"Failed to send group message for {left_member.full_name}: {e2}")
                     
         except Exception as e:
             logger.error(f"Error in handle_member_left: {e}")
     
-    async def handle_chat_member_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_new_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle when new members join the group"""
+        try:
+            # Check if this update is from our target group
+            if update.effective_chat.id != self.group_chat_id:
+                return
+                
+            # Check if someone joined the chat
+            if update.message and update.message.new_chat_members:
+                for new_member in update.message.new_chat_members:
+                    # Don't welcome bots
+                    if new_member.is_bot:
+                        continue
+                        
+                    logger.info(f"New member {new_member.full_name} (@{new_member.username}) joined the group")
+                    
+                    # Create inline keyboard with button to start chat with bot
+                    keyboard = [
+                        [InlineKeyboardButton("👋 Say Hi to Bot", url=f"https://t.me/{context.bot.username}?start=hello")]
+                    ]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    
+                    try:
+                        await context.bot.send_message(
+                            chat_id=self.group_chat_id,
+                            text=f"🎉 Welcome to our group, {new_member.first_name}! \n\n"
+                                 f"👋 Please click the button below to say hi to our bot. This helps us "
+                                 f"reach out for feedback if you ever decide to leave the group.\n\n"
+                                 f"Thanks for joining our community! ✨",
+                            reply_markup=reply_markup
+                        )
+                        logger.info(f"Successfully sent welcome message for {new_member.full_name}")
+                        
+                    except Exception as e:
+                        logger.error(f"Failed to send welcome message for {new_member.full_name}: {e}")
+                        
+        except Exception as e:
+            logger.error(f"Error in handle_new_member: {e}")
+    
+    async def handle_start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /start command when users message the bot privately"""
+        try:
+            user = update.effective_user
+            logger.info(f"User {user.full_name} (@{user.username}) started a conversation with the bot")
+            
+            await update.message.reply_text(
+                f"Hi {user.first_name}! 👋\n\n"
+                f"Thanks for saying hello! Now I can reach out to you if you ever leave our group "
+                f"to get your valuable feedback. 😊\n\n"
+                f"Your input helps us make the community better for everyone! 🙏\n\n"
+                f"Feel free to message me anytime if you have suggestions or feedback about the group! ✨"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error in handle_start_command: {e}")
+
+    async def handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle callback queries from inline buttons"""
+        try:
+            query = update.callback_query
+            await query.answer()
+            
+            if query.data == "start_chat":
+                user = query.from_user
+                logger.info(f"User {user.full_name} clicked the start chat button")
+                
+                await query.edit_message_text(
+                    text=f"✅ Great! {user.first_name}, you can now receive feedback requests from our bot.\n\n"
+                         f"Click the button below to start a private chat:",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💬 Start Private Chat", url=f"https://t.me/{context.bot.username}?start=hello")]
+                    ])
+                )
+                
+        except Exception as e:
+            logger.error(f"Error in handle_callback_query: {e}")
         """Handle chat member status updates (alternative method)"""
         try:
             if not update.chat_member or update.effective_chat.id != self.group_chat_id:
@@ -102,16 +190,45 @@ class TelegramLeaveBot:
                              f"Would you mind sharing why you decided to leave? Your feedback would help us improve the group experience for everyone.\n\n"
                              f"Thanks for taking the time to let us know! 🙏"
                     )
-                    logger.info(f"Successfully sent leave message to {user.full_name}")
+                    logger.info(f"Successfully sent private leave message to {user.full_name}")
                     
                 except Exception as e:
-                    logger.error(f"Failed to send message to {user.full_name}: {e}")
+                    logger.info(f"Couldn't send private message to {user.full_name}, sending group mention instead")
+                    # Fallback to group mention
+                    try:
+                        username_mention = f"@{user.username}" if user.username else user.first_name
+                        await context.bot.send_message(
+                            chat_id=self.group_chat_id,
+                            text=f"👋 {username_mention}, we're sorry to see you go! 😢\n\n"
+                                 f"If you'd like to share why you left our group, please send me a private message. "
+                                 f"Your feedback helps us improve the community for everyone! 🙏\n\n"
+                                 f"Thanks for being part of our group! ✨"
+                        )
+                        logger.info(f"Successfully sent group mention for {user.full_name}")
+                        
+                    except Exception as e2:
+                        logger.error(f"Failed to send group message for {user.full_name}: {e2}")
                     
         except Exception as e:
             logger.error(f"Error in handle_chat_member_update: {e}")
     
     def setup_handlers(self):
         """Setup message handlers"""
+        # Handler for new members joining
+        self.application.add_handler(
+            MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_member)
+        )
+        
+        # Handler for /start command in private chat
+        self.application.add_handler(
+            CommandHandler("start", self.handle_start_command)
+        )
+        
+        # Handler for callback queries from inline buttons
+        self.application.add_handler(
+            CallbackQueryHandler(self.handle_callback_query)
+        )
+        
         # Handler for left_chat_member messages
         self.application.add_handler(
             MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_member_left)
