@@ -1,7 +1,7 @@
 import logging
 import os
 from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, MessageHandler, ChatMemberHandler, filters, ContextTypes
 from telegram.constants import ChatMemberStatus
 import asyncio
 from flask import Flask
@@ -117,9 +117,9 @@ class TelegramLeaveBot:
             MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_member_left)
         )
         
-        # Handler for chat member updates (more reliable)
+        # Handler for chat member updates (more reliable) - using ChatMemberHandler
         self.application.add_handler(
-            MessageHandler(filters.StatusUpdate.CHAT_MEMBER, self.handle_chat_member_update)
+            ChatMemberHandler(self.handle_chat_member_update, ChatMemberHandler.CHAT_MEMBER)
         )
     
     async def start_bot(self):
